@@ -74,7 +74,7 @@ months <- substr(months, 1,7)
 
 ## Geography of crime
 ### Crime studies
-Crime has been widely studied from several approaches, by its relation to space and time, by neighbourhoods, by specific subjects or certain kinds of crime (Walklate, 2017). In geography, we refer to the term geography of crime as the study of crimine incident´s spatial pattern that includes areas prone to crime and areas where criminal may be distribute (Coates, 1977). 
+Crime has been widely studied from several approaches, by its relation to space and time, by neighbourhoods, by specific subjects or certain kinds of crime (Walklate, 2017). In geography, we refer to the term geography of crime as the study of crimine incidentÂ´s spatial pattern that includes areas prone to crime and areas where criminal may be distribute (Coates, 1977). 
 
 Coates (1977) argues that the higher volume of persons, together with specific conditions of an area, increase the probability of crime incidents. In other words, dynamic and populated areas with a combination of population commuting, businesses and visitors, may create conditions for higher crime rates. 
 
@@ -181,7 +181,7 @@ names_liv <- names_liv[,c(1,4)]
 
 ```{r}
 #merge files into one
-price_names <- merge(house_prices, names_liv, by.x="LSOA11CD", by.y="ï..LSOA11CD", all.x=TRUE)
+price_names <- merge(house_prices, names_liv, by.x="LSOA11CD", by.y="Ã¯..LSOA11CD", all.x=TRUE)
 #merge price with imd
 IMD_names <- merge(IMD_rank, price_names, by.x="LSOA11CD", by.y="LSOA11CD", all.x=TRUE)
 ```
@@ -413,7 +413,7 @@ For geographers, points over space necessarily need to be aggregated into areas 
 - Braakmann, N. (2018). "The link between crime risk and property prices in England and Wales: evidence from street-level data". Urban Studies. Vol. 54, issue 8. P. 1990-2007. [Accessed online 14 march 2019] DOI: DOI: 10.1177/0042098016634611
 
 - Coates, B. E.; Johnston, R.J.; Knox, P.L. (1977). Geography and Inequalities. Oxford university press.
-Johansson, E., Gåhlin, C. and Borg, A. (2015). "Crime Hotspots: An Evaluation of the KDE Spatial Mapping Technique". European Intelligence and Security Informatics Conference, Manchester, 2015, pp. 69-74. [Accessed Online 10 March 2019] (http://ieeexplore.ieee.org.liverpool.idm.oclc.org/stamp/stamp.jsp?tp=&arnumber=7379725&isnumber=7379706)
+Johansson, E., GÃ¥hlin, C. and Borg, A. (2015). "Crime Hotspots: An Evaluation of the KDE Spatial Mapping Technique". European Intelligence and Security Informatics Conference, Manchester, 2015, pp. 69-74. [Accessed Online 10 March 2019] (http://ieeexplore.ieee.org.liverpool.idm.oclc.org/stamp/stamp.jsp?tp=&arnumber=7379725&isnumber=7379706)
 
 - Leverentz, M. (2017). "Contextualizing Community crime control: race, geography, and configuration of control in four communities". American Society of Criminology. Vol. 55 Issue 1. P. 112-136.
 Muncie, J., Talbot, D. and Walters, R. (2009) Crime : local and global. Cullompton : Willan in association with the Open University, 2009.
