@@ -1,0 +1,438 @@
+---
+title: "Assignment 1"
+author: "201300196"
+date: "7 de marzo de 2019"
+output:
+  html_document: default
+---
+
+```{r}
+rm (list=ls())
+```
+
+```{r}
+#install.packages("merTools")
+#install.packages("classInt)
+#install.packages("dplyr")
+#install.packages("tidyverse")
+#install.packages("spatialEco")
+#install.packages("mapview")
+#install.packages("htmltools")
+library(htmltools)
+library("mapview")
+library("raster")
+#install.packages("leaflet.extras")
+library(leaflet.extras)
+library(tidyverse)
+#library(dlpyr)
+library(leaflet)
+library(rgdal)
+library("ggplot2")
+library("RColorBrewer")
+library("maptools")
+library("ggmap")
+library("RColorBrewer")
+library("rgdal")
+library("RCurl")
+library("jsonlite")
+library("httr")
+library("ggmap")
+library("sf")
+library("spatialEco")
+library(lme4)
+library(merTools)
+library(classInt)
+library(sp)
+library(leaflet.extras)
+```
+
+```{r}
+#Read shapefile
+LSOA <- readOGR("LSOA_code.shp")
+```
+
+```{r}
+#Read shapefile
+LSOA <- readOGR("LSOA_code.shp")
+#Transform coordinates from northings-eastings to WGS
+proj <- CRS("+init=epsg:4326")
+LSOA_prices <- spTransform(LSOA, proj)
+```
+
+```{r}
+#Use bbbox with WGS projection to extract crime data from api
+LSOA_prices@bbox
+```
+
+```{r}
+#create a list for the months to be able to loop over these
+months <- (seq(as.Date("2018-01-01"), as.Date("2018-12-31"), by="months"))
+#keep only year and month
+months <- substr(months, 1,7)
+```
+
+
+## Geography of crime
+### Crime studies
+Crime has been widely studied from several approaches, by its relation to space and time, by neighbourhoods, by specific subjects or certain kinds of crime (Walklate, 2017). In geography, we refer to the term geography of crime as the study of crimine incident´s spatial pattern that includes areas prone to crime and areas where criminal may be distribute (Coates, 1977). 
+
+Coates (1977) argues that the higher volume of persons, together with specific conditions of an area, increase the probability of crime incidents. In other words, dynamic and populated areas with a combination of population commuting, businesses and visitors, may create conditions for higher crime rates. 
+
+Crime studies usually consist of point data plotted over a random space without any context, this imply a risk because we observe point patterns on an area without any insight on the underlying population or characteristics of each area. When we count the incidence of points within areas, also known as intensity maps, we add context data to areas. This method is key to understand how population composition or spatial characteristics may affect or increase crime incidents.
+
+As Geographers, we are interested in spatial differences of phenomena, in this case crime. Literature suggest that there is a correlation between areas of high incidence of crime and house prices Braakmann, 2018); others argue that qualification and education also influence or have an effect on high crime rates in an area (Ormerod, 2005); other studies illustrate that deprivation index, health and unemployment are key factors when understanding crime (Muncie, Talbot and Walters, 2009). However, are these causes valid for all types of crimes? Alternatively, are there spatial differences between certain categories of crime? In this work, we will focus on two main aspects; first, compare crime monthly variation during 2018; second, add data from house prices and IMD index to provide context to the study of crime.
+
+The aim of this work is to understand if different contexts affect the incidence of crimes in an area, for instance house prices and IMD indexes, or it is possible that other conditions increase crime incidents.
+
+### Methodology
+Crime data is usually analysed as point data over an area, the UK Police site offers open data at street level available for download as csv files and through and API. The latter will be used to summarize the data for a complete year. To optimize the extraction for each month within 2018, we create a loop that allows us to extract efficiently all monthly data without having to write 12 lines of code.
+
+After the extraction, we will use leaflet to create dynamic maps for visualization of point data concentration. However, observing and analysing point data without having a context data, can result in biased results and conclusions. Especially when dealing with crime, which is the result of a combination of conditions from the space where crime happens, but also with the criminal own characteristics (Walklate, 2017).
+
+To create context, we will rely on data from house prices in Liverpool and IMD index to understand if, as researchers argue, there is a correlation between house prices, deprivation and crime (Braakmann, 2018; Leveranz, 2017; Murie, 1998). The IMD index is also related to the neighbourhood conditions and following the idea that many incidents happen close to the criminal's neighbourhood (Coates, 1977).
+
+```{r Loop API}
+#Create a loop to extract 12 months of crime data
+#first create an empty dataframe to paste the results
+crime_2018 <- data.frame()
+#loop indicating 12 values in months
+for( i in 1:12){
+  #setting the link of the api paste 0 will paste our loop list months without spaces to the webapi link
+  webapi <- paste0("https://data.police.uk/api/crimes-street/all-crime?poly=53.474983,-3.008756:53.474983,-2.818001:53.32677,-2.818001:53.32677,-3.008756&date=", months[i])
+  #specify the function to extract the data exactly like a single month extraction
+  data <- jsonlite::fromJSON(txt=webapi,flatten=TRUE)
+  #paste the row using rbind to our empty data frame 
+  crime_2018 <- rbind(crime_2018, data)
+}
+```
+
+
+```{r}
+#Longitude and latitude of shapefile are not numeric convert
+crime_2018$location.latitude <- as.numeric(crime_2018$location.latitude)
+crime_2018$location.longitude <- as.numeric(crime_2018$location.longitude)
+```
+
+
+```{r}
+#extract coordinates from api crime file
+coordinates <- crime_2018[, c("location.longitude", "location.latitude")]
+```
+
+```{r}
+#create a shp from the APIs extraction coordinates
+crime_to_shp <- SpatialPointsDataFrame(coords = coordinates, data = crime_2018)
+#Assign same projection as LSOA shapefile
+proj4string(crime_to_shp) <- proj4string(LSOA_prices)
+#assign LSOA to each crime point using LSOA shapefile
+crime_LSOA <- point.in.poly(crime_to_shp, LSOA_prices)
+```
+
+```{r}
+#remove NA from crime_LSOA crime data, NA area crime points that do not fall within Liverpool Lsoas
+crime_LSOA@data <- crime_LSOA@data[!is.na(crime_LSOA@data$LSOA_CD), ]
+```
+
+```{r}
+#count crimes per LSOA creates a new data frame
+crime_total <- crime_LSOA@data %>%
+  group_by(LSOA_CD) %>%
+  summarise(total=n())
+head(crime_total)
+```
+
+```{r}
+#extract table from shape
+crime_liv <- crime_LSOA@data
+```
+
+```{r}
+#subset crime liv
+crime_liv <- crime_liv[,c(1,5,7,8,9,10,11,14)]
+```
+
+```{r}
+#merge table of total to LSOAs
+#Join table with shapefile
+LSOA_prices <- merge(LSOA_prices, crime_total,by.x="LSOA_CD", by.y="LSOA_CD", all.x=TRUE)
+```
+
+```{r}
+#Load csv with IMD and names of LSOAs
+prices<- read.csv("house_prices_2015.csv")
+names <- read.csv("Lower_Layer_Super_Output_Area_2011_to_Ward_2015_Lookup_in_England_and_Wales.csv")
+IMD <- read.csv("IMD_2015.csv")
+```
+
+```{r}
+#Subset files
+#subset names file to liverpool only LAD15CD "E08000012"
+names_liv <- subset(names, LAD15CD == 'E08000012')
+#subset imd
+IMD_rank <- IMD[,c(1,2)]
+#subset house prices
+house_prices <- prices[,c(1, 42)]
+```
+
+```{r}
+#remove columns not needed for names
+names_liv <- names_liv[,c(1,4)]
+```
+
+```{r}
+#merge files into one
+price_names <- merge(house_prices, names_liv, by.x="LSOA11CD", by.y="ï..LSOA11CD", all.x=TRUE)
+#merge price with imd
+IMD_names <- merge(IMD_rank, price_names, by.x="LSOA11CD", by.y="LSOA11CD", all.x=TRUE)
+```
+
+```{r}
+#merge IMD names table with shapefile
+LSOA_prices <- merge(LSOA_prices, IMD_names,by.x="LSOA_CD", by.y="LSOA11CD", all.x=TRUE)
+```
+
+### Crime in Liverpool
+
+
+According to the UK Police, approximately 90,000 crimes were perpetrated in the area delimited by coordinates from the extraction (blue box in the map). This bounding box in the API Request presents a drawback to the amount of data being extracted, as many other boroughs not part of Liverpool were accounted for within the box. One way to extract the points from Liverpool is by performing a spatial join using the boundary of Liverpool and "clip" the crime points for Liverpool. By counting only crimes within each LSOA, the crimes for 2018 are reduced to 73,318.
+
+Once we have cleaned and arranged data, we can create a first visualization of total crime distribution by month. By looking at figure 1, it is clear that certain crimes fluctuate between months and each month differs in number of incidents (Figure 1). Moving on to categories, in 2018 the most recurrent incident was violent crime, followed by anti-social behaviour. The least two categories observed from figure 1 are bicycle theft, robbery and possession of weapons Figure 1). However, what can we infer from the crime variation over time? Is it possible to detect patterns related to certain crime or incidents that occur at any specific space?
+
+```{r}
+#plot total crime per month
+ggplot(data=crime_liv)+
+  geom_bar(aes(x=month, fill=category))+
+  ggtitle("Total crime per month and category")+
+  theme(axis.text.x = element_text(angle = 335, hjust = 0))+
+  coord_flip()+
+  ggtitle("Figure 1. Liverpool crime by month and category")
+```
+
+
+The first approach on analysing crime in Liverpool is to plot incidents over an area. Map 1 shows the point location of each event, however, plotting points into a map without considering the context may lead to biased observations (Johansson, et. al. 2015). Therefore, map 2 shows two approaches to analyse crime, first by aggregating crimes into each LSOA to create an intensity map (Map 1. Total crime layer). Second, observe crime patterns as a heatmap which depicts the spatial dynamics of incidents during 2018 (Map 1, crime heatmap layer). Together, these methods allow for a more effective way to visualize the spatial patterns of crime than plotting raw counts of points over a map (Map 1, Incidents layer) (Scott, 2009).
+
+
+```{r}
+#create breaks and pass it to palette
+breaks_prices <- classIntervals(LSOA_prices@data$total, n = 5, style = "fisher")
+```
+
+```{r}
+#create palette and bins for crime per LSOA
+bins_prices <- c(0, 180, 355, 679, 2602, 4408)
+month_pal <- colorBin(palette="RdPu", domain = LSOA_prices$total, bins = bins_prices)
+#create labels for base polygons LSOA name and total crime
+LSOAcrime_labels = paste("LSOA name: ", LSOA_prices$WD15NM, "<br/>", "Total crime: ", LSOA_prices$total.x, 2, sep="") %>%
+  lapply(htmltools::HTML)
+```
+ 
+
+#### Map 1. Liverpool: crime overview during 2018
+```{r}
+#Create leaflet map to overview all crime
+#set the size of the map
+basemap <- leaflet(data = crime_liv, height=500)
+#add the tiles
+basemap <- addTiles(basemap)
+#set view of the map to liverpool
+basemap <- setView(basemap, lng = -2.9655722, lat = 53.405936, zoom= 12)
+#Set max zoom
+#basemap <- setMaxBounds(basemap, lng1 = -2.81112581, lat1 = 53.32547326, lng2 = -3.02168538,  lat2= 53.47347674)
+#add crime as clustered markers
+basemap <- addMarkers(basemap,~location.longitude, ~location.latitude, clusterOptions = markerClusterOptions(), popup = ~category, group = "Incidents")
+#add rectable to focus on Liverpool
+basemap <- addRectangles(basemap,lng1= -2.818001, lat1 =53.32677 , lng2= -3.008756, lat2=53.4749 , fillColor = "transparent")
+#see crime data as heatmap 
+basemap <- addHeatmap(basemap, lng=~location.longitude, lat=~location.latitude, 
+  group = "Crime Heatmap", blur = 20, max = 0.05, radius = 20, minOpacity = 0.05)
+#add intensity map (point to polygon)
+basemap <- addPolygons(basemap, data=LSOA_prices, stroke=TRUE, fillColor = ~month_pal(LSOA_prices$total), color = "#636363", fillOpacity = 0.4, weight = 0.3, group = "Total crime", label = LSOAcrime_labels, labelOptions = labelOptions( style = list("font-family"= "serif", "font-weight" = "normal", padding = "3px 8px"), textsize = "11px", direction = "auto"))
+#add legend
+basemap <- addLegend(basemap, "bottomleft", pal =  month_pal, values = ~LSOA_prices@data$total, title = "Total crime", labels = "2", group = "Total crime")
+#add controls for layers and groups
+basemap <- addLayersControl(basemap, 
+                            baseGroups = c("Incidents", "Crime Heatmap"),
+                            overlayGroups = c("Total crime"), 
+                            options = layersControlOptions(collapsed = FALSE))
+basemap
+```
+
+```{r}
+#create a list of month by name
+month_text <- month.name
+```
+
+
+```{r}
+#create a loop to subset crime data by month
+month_subset <- split(crime_liv, crime_liv$month)
+#month list previously created
+for (i in 1:length(month_subset)) {
+  assign(month_text[i], month_subset[[i]])
+}
+```
+
+
+#### Table 1. Total crime per month, 2018
+```{r}
+#create summary of crimes per month
+crime_month <- table(crime_liv$month)
+#change to data frame
+crime_month <- as.data.frame(crime_month)
+#add columns month and total crime
+names(crime_month) <- c("Month", "Total_crime")
+crime_month<- crime_month[, c(1,2)]
+#order descending
+crime_month<- crime_month[order(-crime_month$Total_crime),]
+crime_month
+```
+
+### Crime by month
+From table 1, is clear that incidents tend to vary between months; for instance, October was the period that registered more crimes, followed by November and May. The months that registered the lowest crime rates were March and December 2018. Map 2 shows the distribution of crime during the whole year, an interesting finding is that is most of the year, Liverpool John Lennon Airport registers low incidents but the highest peaks were found in January and December 2018. In these cases, associating the volume of travellers at Liverpool Airport on these dates may be useful to understand the increase of crimes on the area.
+
+On the other hand, the blue rectangle in map 2 focus the area chosen as most dynamic in terms of house prices, IMD index, and crime rates. During October and May, which are the top two months with crime incidents, the LSOAs within the blue rectangle showed a high concentration of crime, while in months like April and August there seemed to be a decrease of incidents.
+
+There are two interesting aspects to observe in the blue rectangle, first, the rectangle holds the most visited parts of the city, Liverpool One, the docks area and the Knowledge quarter. The three areas registered high volume of day and night population, Merseyrail stations and bus station at Queen square bus station, Liverpool Lime Street and Liverpool One bus stations. Second, the area holds both LSOAs within high and low IMD ranks; within the low ranks one area that stands out is Toxteth which shows high volumes of crime in all months.
+In relation to house prices, in south east Liverpool LSOAS like Allerton and Woolton register low number of crime rates in all months. In contrast, north Liverpool shows even distribution of crime rates in all months and lower median house prices than south east Liverpool.
+
+In general, we can conclude that crime is not an univariate analysis and requires context to understand the underlying factors that may cause high volume of incidents. In this analysis, we used total crime per LSOA, house prices and IMD index to try to find the relationship between these variables and crime. However, another area that needs to be accounted for is the criminals background and demographic conditions, because not everything can be explained by context and the area where crimes occur. 
+
+ 
+
+```{r}
+#create breaksfor prices
+breaks_price <- classIntervals(LSOA_prices@data$md_2015, n = 5, style = "fisher")
+#create breaks for IMD
+breaks_IMD <- classIntervals(LSOA_prices@data$imd_rank, n = 5, style = "fisher")
+```
+
+```{r}
+#create bins for prices and imd
+bins_prices <- c(30000, 79500, 128000, 196000, 315000, 427500)
+bins_imd <- c(0, 3675,9440,16497,23307,32090)
+#create palette for prices
+prices_pal <- colorBin(palette="Greens", domain = LSOA_prices$md_2015, bins = bins_prices)
+#create palett for imd
+imd_pal <- colorBin(palette="Blues", domain = LSOA_prices$imd_2015, bins = bins_imd)
+```
+
+```{r}
+#create labels for polygons LSOA name and totals
+priceimdtotal_labels = paste("LSOA name: ", LSOA_prices$WD15NM, "<br/>", "Total crime: ", LSOA_prices$total, "<br/>", "Median price: ", LSOA_prices$md_2015, "<br/>", "IMD rank: ", LSOA_prices$imd_rank, 4, sep="") %>%
+  lapply(htmltools::HTML)
+```
+
+```{r}
+#add markers
+markers <- read.csv( file = "markers.csv", header = TRUE, sep = ",")
+```
+
+
+#### Map 2. Liverpool: crime heatmaps, total crime, IMD rank and median house prices
+```{r}
+month_map <- leaflet(data =crime_liv, height=500)
+#add the tiles
+month_map <- addTiles(month_map)
+#set view of the map to liverpool
+month_map <- setView(month_map, lng = -2.9655722, lat = 53.405936, zoom= 12)
+#set zoom
+month_map <- fitBounds(month_map, lat1 =53.474983 ,lng1 =-3.008756 , lat2 = 53.32677, lng2 = -2.818001 )
+# Add rectangle
+month_map<- addRectangles(month_map,lng1= -3.004183, lat1 =53.41432 , lng2= -2.937866, lat2=53.387683 , fillColor = "transparent")
+#add heat maps
+month_map <- addHeatmap(month_map, data = January, lng=~location.longitude, lat=~location.latitude, 
+  group = "January", blur = 20, max = 0.05, radius = 15, minOpacity = 0.05)
+month_map <- addHeatmap(month_map, data= February, lng=~location.longitude, lat=~location.latitude, 
+  group = "February", blur = 20, max = 0.05, radius = 15, minOpacity = 0.05)
+month_map <- addHeatmap(month_map, data= March, lng=~location.longitude, lat=~location.latitude, 
+  group = "March", blur = 20, max = 0.05, radius = 15, minOpacity = 0.05)
+month_map <- addHeatmap(month_map, data= April, lng=~location.longitude, lat=~location.latitude, 
+  group = "April", blur = 20, max = 0.05, radius = 15, minOpacity = 0.05)
+month_map <- addHeatmap(month_map, data= May, lng=~location.longitude, lat=~location.latitude, 
+  group = "May", blur = 20, max = 0.05, radius = 15, minOpacity = 0.05)
+month_map <- addHeatmap(month_map, data= June, lng=~location.longitude, lat=~location.latitude, 
+  group = "June", blur = 20, max = 0.05, radius = 15, minOpacity = 0.05)
+month_map <- addHeatmap(month_map, data= July, lng=~location.longitude, lat=~location.latitude, 
+ group = "July", blur = 20, max = 0.05, radius = 15, minOpacity = 0.05)
+month_map <- addHeatmap(month_map, data= August, lng=~location.longitude, lat=~location.latitude, 
+ group = "August", blur = 20, max = 0.05, radius = 15, minOpacity = 0.05)
+month_map <- addHeatmap(month_map, data= September, lng=~location.longitude, lat=~location.latitude, 
+ group = "September", blur = 20, max = 0.05, radius = 15, minOpacity = 0.05)
+month_map <- addHeatmap(month_map, data= October, lng=~location.longitude, lat=~location.latitude, 
+  group = "October", blur = 20, max = 0.05, radius = 15, minOpacity = 0.05)
+month_map <- addHeatmap(month_map, data= November, lng=~location.longitude, lat=~location.latitude, 
+ group = "November", blur = 20, max = 0.05, radius = 15, minOpacity = 0.05)
+month_map <- addHeatmap(month_map, data= December, lng=~location.longitude, lat=~location.latitude, 
+ group = "December", blur = 20, max = 0.05, radius = 15, minOpacity = 0.05)
+#add markers 
+month_map <- addMarkers(month_map, data = markers, ~Lng, ~Lat,label =~htmlEscape(Name))
+#add polygon total crime per LSOA
+month_map <- addPolygons(month_map, data=LSOA_prices, stroke=TRUE, fillColor = ~month_pal(LSOA_prices$total), color = "#636363", fillOpacity = 0.7, weight = 0.3, group = "Total crime", label = LSOAcrime_labels, labelOptions = labelOptions( style = list("font-family"= "serif", "font-weight" = "normal", padding = "3px 8px"), textsize = "11px", direction = "auto"))
+#Add IMD data
+month_map <- addPolygons(month_map, data=LSOA_prices, stroke=TRUE, fillColor = ~imd_pal(LSOA_prices@data$imd_rank), color = "#636363", fillOpacity = 0.7, group = "IMD rank", weight = 0.3, label = priceimdtotal_labels, labelOptions = labelOptions( style = list("font-family"= "serif", "font-weight" = "normal", padding = "3px 8px"), textsize = "11px", direction = "auto"))
+#Add prices data
+month_map <- addPolygons(month_map, data=LSOA_prices, stroke=TRUE, fillColor = ~prices_pal(LSOA_prices@data$md_2015), color = "white", fillOpacity = 0.7, group = "Prices", weight = 0.3, label = priceimdtotal_labels, labelOptions = labelOptions( style = list("font-family"= "serif", "font-weight" = "normal", padding = "3px 8px"), textsize = "11px", direction = "auto"))
+#Add layers control
+month_map <- addLayersControl(month_map, 
+                              baseGroups = c("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"), 
+                              overlayGroups = c("Total crime", "IMD rank", "Prices"), 
+                              options = layersControlOptions(collapsed = TRUE))
+#add crime total legend
+month_map <- addLegend(month_map, "bottomleft", 
+                       pal =  month_pal, 
+                       values = ~LSOA_prices@data$total, 
+                       title = "Total crime", 
+                       labels = "1", 
+                       group = "Total crime")
+#add IMD legend
+month_map <- addLegend(month_map, "bottomleft", 
+                       pal =  imd_pal, 
+                       values = ~LSOA_prices@data$imd_rank, 
+                       title = "IMD rank", 
+                       labels = "2", 
+                       group = "IMD rank")
+#Add prices legend
+month_map <- addLegend(month_map, "topleft", 
+                       pal =  prices_pal, 
+                       values = ~LSOA_prices@data$md_2015, 
+                       title = "Median prices", 
+                       labels = "1", 
+                       group = "Prices")
+
+month_map
+```
+
+### Conclusion
+The Police API provides information available to everyone that is interested at looking at crime incidents to understand the social cost of criminal activities. For instance, locating points over space, together with a buffer on layers of police stations and security cameras, may help in identifying gaps in surveillance and security. On the other hand, having these data available may be used to calculate house prices, as Braakman (2018) analysed, different types of crime have a different effect in the rates of dwelling's prices. 
+
+For geographers, points over space necessarily need to be aggregated into areas or have a context that can provide information of the possible underlying reasons behind crimes. In some types of crimes, such as bicycle theft, it may not be possible to provide context due to unavailability of data and total volume of crimes committed under this category. In addition, this study showed that high number of incidents tend to be located on areas with low house prices whereas in areas with high dwelling's prices, the number of incidents seem to be lower.
+
+
+
+### References 
+- Braakmann, N. (2018). "The link between crime risk and property prices in England and Wales: evidence from street-level data". Urban Studies. Vol. 54, issue 8. P. 1990-2007. [Accessed online 14 march 2019] DOI: DOI: 10.1177/0042098016634611
+
+- Coates, B. E.; Johnston, R.J.; Knox, P.L. (1977). Geography and Inequalities. Oxford university press.
+Johansson, E., Gåhlin, C. and Borg, A. (2015). "Crime Hotspots: An Evaluation of the KDE Spatial Mapping Technique". European Intelligence and Security Informatics Conference, Manchester, 2015, pp. 69-74. [Accessed Online 10 March 2019] (http://ieeexplore.ieee.org.liverpool.idm.oclc.org/stamp/stamp.jsp?tp=&arnumber=7379725&isnumber=7379706)
+
+- Leverentz, M. (2017). "Contextualizing Community crime control: race, geography, and configuration of control in four communities". American Society of Criminology. Vol. 55 Issue 1. P. 112-136.
+Muncie, J., Talbot, D. and Walters, R. (2009) Crime : local and global. Cullompton : Willan in association with the Open University, 2009.
+
+
+- Murie, A. (1998). "Linking housing changes to crime". In Jones, C., Nellis, M. (editors). Crime & Social exclusion. Blackwell publishing. 
+
+- Ormerod, P. (2005) Crime : economic incentives and social networks. London : Institute of Economic Affairs, 2005.
+
+-Scott, D. (2009). Multivariate density estimation: theory practice and visualization. Vol. 383. Wiley. [Online]. Accessed 10 December 2018. https://pdfs.semanticscholar.org/2f5a/2ca3c410c209cdc19c71582085f44c89e902.pdf
+
+- Walklate, S. (2017). Criminology, the basics. Third edition. Routledge. NY. USA.
+
+### Datasets
+- CDRC Median House Prices Geodata Pack (1995-2015): Liverpool.
+
+- CDRC English indices of deprivation 2015 Geodata Pack: Liverpool
+
+- Crime data from Uk Police API. (https://data.police.uk/docs/)
+
+
+
